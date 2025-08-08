@@ -386,6 +386,7 @@
                 // Listen for connection events
                 wakuClient.events.addEventListener("waku:connection", (event) => {
                     console.log('Waku connection event:', event.detail); // true if connected, false if disconnected
+                    console.log(`Waku connection event: ${event.detail}`)
                     if (event.detail) {
                         updateWakuStatus('Connected');
                     } else {
@@ -402,16 +403,13 @@
                 try {
                     console.log('Dialing Waku node:', nodeAddress);
                     await wakuClient.dial(nodeAddress);
-                    console.log('Successfully connected to Waku node');
-                    updateWakuStatus('Connected to waku.fryorcraken.xyz');
+                    console.log('Successfully connected to fryorcraken Waku node');
                 } catch (dialError) {
                     console.error('Failed to dial Waku node:', dialError);
-                    updateWakuStatus('Started - Dial failed, using bootstrap');
                 }
                 
             } catch (error) {
                 console.error('Failed to initialize Waku:', error);
-                updateWakuStatus('Failed to connect');
             }
         }
 
