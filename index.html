@@ -149,7 +149,30 @@
         .post:hover .delete-btn {
             display: block;
         }
+
+        .post-magnet {
+            padding: 8px 12px;
+            font-size: 10px;
+            color: #000080;
+            background-color: #f0e0d6;
+            border-top: 1px solid #d9bfb7;
+            word-break: break-all;
+            cursor: pointer;
+        }
+
+        .post-magnet:hover {
+            background-color: #e8d8c8;
+        }
+
+        .torrent-status {
+            padding: 4px 12px;
+            font-size: 10px;
+            color: #789922;
+            background-color: #f0e0d6;
+            font-style: italic;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -176,6 +199,7 @@
     <script>
         let postCounter = 1;
         let images = [];
+        let client = new WebTorrent();
 
         const fileInput = document.getElementById('fileInput');
         const imageWall = document.getElementById('imageWall');
@@ -191,7 +215,7 @@
                 if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
                     reader.onload = function(e) {
-                        addImageToBoard(e.target.result, file.name, file.size);
+                        addImageToBoard(e.target.result, file.name, file.size, file);
                     };
                     reader.readAsDataURL(file);
                 }
@@ -200,7 +224,7 @@
             fileInput.value = '';
         }
 
-        function addImageToBoard(imageSrc, filename, filesize) {
+        function addImageToBoard(imageSrc, filename, filesize, file) {
             const post = document.createElement('div');
             post.className = 'post';
             post.dataset.postId = postCounter;
@@ -216,6 +240,10 @@
                 </div>
                 <img class="post-image" src="${imageSrc}" alt="${filename}">
                 <div class="post-filename">${filename} (${filesizeKB} KB)</div>
+                <div class="torrent-status" id="status-${postCounter}">Creating torrent...</div>
+                <div class="post-magnet" id="magnet-${postCounter}" style="display: none;" onclick="copyToClipboard(this.textContent)">
+                    Click to copy magnet URI
+                </div>
                 <button class="delete-btn" onclick="deletePost(${postCounter})">&times;</button>
             `;
 
@@ -230,8 +258,13 @@
                 src: imageSrc,
                 filename: filename,
                 filesize: filesize,
-                timestamp: now
+                timestamp: now,
+                file: file
             });
+
+            if (file) {
+                createTorrent(file, postCounter);
+            }
 
             postCounter++;
             updateFileCount();
@@ -278,12 +311,64 @@
                 if (file.type.startsWith('image/')) {
                     const reader = new FileReader();
                     reader.onload = function(e) {
-                        addImageToBoard(e.target.result, file.name, file.size);
+                        addImageToBoard(e.target.result, file.name, file.size, file);
                     };
                     reader.readAsDataURL(file);
                 }
             });
         });
+
+        function createTorrent(file, postId) {
+            const statusEl = document.getElementById(`status-${postId}`);
+            const magnetEl = document.getElementById(`magnet-${postId}`);
+            
+            statusEl.textContent = 'Creating torrent...';
+            
+            client.seed(file, function (torrent) {
+                statusEl.textContent = `Seeding (${torrent.numPeers} peers)`;
+                magnetEl.textContent = torrent.magnetURI;
+                magnetEl.style.display = 'block';
+                magnetEl.title = 'Click to copy magnet URI';
+                
+                torrent.on('wire', function () {
+                    statusEl.textContent = `Seeding (${torrent.numPeers} peers)`;
+                });
+                
+                torrent.on('upload', function () {
+                    statusEl.textContent = `Seeding (${torrent.numPeers} peers) - ${formatBytes(torrent.uploaded)} uploaded`;
+                });
+            });
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                const notification = document.createElement('div');
+                notification.textContent = 'Magnet URI copied to clipboard!';
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #789922;
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 5px;
+                    z-index: 1000;
+                    font-size: 14px;
+                `;
+                document.body.appendChild(notification);
+                setTimeout(() => notification.remove(), 3000);
+            }).catch(function() {
+                alert('Failed to copy magnet URI');
+            });
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
     </script>
 </body>
 </html>
