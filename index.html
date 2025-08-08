@@ -199,7 +199,7 @@
     <script>
         let postCounter = 1;
         let images = [];
-        let client = new WebTorrent();
+        let torrentClient = new WebTorrent();
 
         const fileInput = document.getElementById('fileInput');
         const imageWall = document.getElementById('imageWall');
@@ -324,7 +324,7 @@
             
             statusEl.textContent = 'Creating torrent...';
             
-            client.seed(file, function (torrent) {
+            torrentClient.seed(file, function (torrent) {
                 statusEl.textContent = `Seeding (${torrent.numPeers} peers)`;
                 magnetEl.textContent = torrent.magnetURI;
                 magnetEl.style.display = 'block';
