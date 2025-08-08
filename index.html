@@ -173,6 +173,7 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@waku/sdk@0.0.33/bundle/index.js"></script>
 </head>
 <body>
     <div class="header">
@@ -186,6 +187,7 @@
         </button>
         <input type="file" id="fileInput" accept="image/*" multiple>
         <span id="fileCount"></span>
+        <span id="wakuStatus" style="margin-left: 20px; color: #789922; font-size: 12px;">Waku: Connecting...</span>
     </div>
 
     <div class="board">
@@ -200,6 +202,7 @@
         let postCounter = 1;
         let images = [];
         let torrentClient = new WebTorrent();
+        let wakuClient = null;
 
         const fileInput = document.getElementById('fileInput');
         const imageWall = document.getElementById('imageWall');
@@ -369,6 +372,37 @@
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
+
+        async function initWaku() {
+            try {
+                console.log('Initializing Waku client...');
+                wakuClient = await waku.createLightNode({
+                    defaultBootstrap: true
+                });
+                
+                await wakuClient.start();
+                console.log('Waku client started successfully');
+                
+                await wakuClient.waitForRemotePeer();
+                console.log('Connected to Waku peers');
+                
+                updateWakuStatus('Connected');
+            } catch (error) {
+                console.error('Failed to initialize Waku:', error);
+                updateWakuStatus('Failed to connect');
+            }
+        }
+
+        function updateWakuStatus(status) {
+            const statusElement = document.getElementById('wakuStatus');
+            if (statusElement) {
+                statusElement.textContent = `Waku: ${status}`;
+            }
+        }
+
+        window.addEventListener('load', function() {
+            initWaku();
+        });
     </script>
 </body>
 </html>
