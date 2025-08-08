@@ -173,7 +173,6 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@waku/sdk@0.0.33/bundle/index.js"></script>
 </head>
 <body>
     <div class="header">
@@ -198,7 +197,11 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import {
+            createLightNode,
+        } from 'https://unpkg.com/@waku/sdk@0.0.34-aac044f.0/bundle/index.js';
+        
         let postCounter = 1;
         let images = [];
         let torrentClient = new WebTorrent();
@@ -376,17 +379,36 @@
         async function initWaku() {
             try {
                 console.log('Initializing Waku client...');
-                wakuClient = await waku.createLightNode({
+                wakuClient = await createLightNode({
                     defaultBootstrap: true
+                });
+                
+                // Listen for connection events
+                wakuClient.events.addEventListener("waku:connection", (event) => {
+                    console.log('Waku connection event:', event.detail); // true if connected, false if disconnected
+                    if (event.detail) {
+                        updateWakuStatus('Connected');
+                    } else {
+                        updateWakuStatus('Disconnected');
+                    }
                 });
                 
                 await wakuClient.start();
                 console.log('Waku client started successfully');
+                updateWakuStatus('Started - Connecting to node...');
                 
-                await wakuClient.waitForRemotePeer();
-                console.log('Connected to Waku peers');
+                // Dial the specific Waku node
+                const nodeAddress = '/dns4/waku.fryorcraken.xyz/tcp/8000/wss/p2p/16Uiu2HAmMRvhDHrtiHft1FTUYnn6cVA8AWVrTyLUayJJ3MWpUZDB';
+                try {
+                    console.log('Dialing Waku node:', nodeAddress);
+                    await wakuClient.dial(nodeAddress);
+                    console.log('Successfully connected to Waku node');
+                    updateWakuStatus('Connected to waku.fryorcraken.xyz');
+                } catch (dialError) {
+                    console.error('Failed to dial Waku node:', dialError);
+                    updateWakuStatus('Started - Dial failed, using bootstrap');
+                }
                 
-                updateWakuStatus('Connected');
             } catch (error) {
                 console.error('Failed to initialize Waku:', error);
                 updateWakuStatus('Failed to connect');
