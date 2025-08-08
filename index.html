@@ -209,6 +209,7 @@
         let wakuClient = null;
         let memeProtobuf = null;
         let wakuEncoder = null;
+        let wakuDecoder = null;
         
         const CONTENT_TOPIC = '/meme-board/1/images/proto';
         
@@ -502,9 +503,10 @@
                 console.log('Waku client started successfully');
                 updateWakuStatus('Started - Connecting to node...');
                 
-                // Create encoder for sending messages
+                // Create encoder and decoder for messages
                 wakuEncoder = wakuClient.createEncoder({ contentTopic: CONTENT_TOPIC });
-                console.log('Created Waku encoder');
+                wakuDecoder = wakuClient.createDecoder({ contentTopic: CONTENT_TOPIC });
+                console.log('Created Waku encoder and decoder');
                 
                 // Subscribe to incoming messages
                 await subscribeToMessages();
@@ -528,8 +530,7 @@
             try {
                 console.log('Subscribing to Waku messages...');
                 
-                const subscription = await wakuClient.filter.createSubscription();
-                await subscription.subscribe([CONTENT_TOPIC], (message) => {
+                const subscription = await wakuClient.filter.subscribe(wakuDecoder, (message) => {
                     console.log('Received Waku message:', message);
                     handleIncomingMessage(message);
                 });
