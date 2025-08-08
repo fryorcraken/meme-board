@@ -127,28 +127,7 @@
             margin-top: 50px;
         }
 
-        .delete-btn {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background-color: rgba(175, 10, 15, 0.8);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            display: none;
-        }
 
-        .post {
-            position: relative;
-        }
-
-        .post:hover .delete-btn {
-            display: block;
-        }
 
         .post-magnet {
             padding: 8px 12px;
@@ -286,7 +265,6 @@
                 <div class="post-magnet" id="magnet-${postCounter}" style="display: none;" onclick="copyToClipboard(this.textContent)">
                     Click to copy magnet URI
                 </div>
-                <button class="delete-btn" onclick="deletePost(${postCounter})">&times;</button>
             `;
 
             if (emptyState.style.display !== 'none') {
@@ -315,18 +293,7 @@
             updateFileCount();
         }
 
-        function deletePost(postId) {
-            const post = document.querySelector(`[data-post-id="${postId}"]`);
-            if (post) {
-                post.remove();
-                images = images.filter(img => img.id !== postId);
-                updateFileCount();
-                
-                if (images.length === 0) {
-                    emptyState.style.display = 'block';
-                }
-            }
-        }
+
 
         function updateFileCount() {
             if (images.length > 0) {
@@ -602,7 +569,6 @@
                     <div class="post-filename">${messageData.filename} (${filesizeKB} KB)</div>
                     <div class="torrent-status">Received via Waku</div>
                     <div class="post-magnet" onclick="copyToClipboard(this.textContent)">${messageData.magnetUri}</div>
-                    <button class="delete-btn" onclick="deletePost(${messageData.postId})">&times;</button>
                 `;
                 
                 if (emptyState.style.display !== 'none') {
