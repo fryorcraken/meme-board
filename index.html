@@ -173,6 +173,7 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.5/dist/protobuf.min.js"></script>
 </head>
 <body>
     <div class="header">
@@ -206,6 +207,39 @@
         let images = [];
         let torrentClient = new WebTorrent();
         let wakuClient = null;
+        let memeProtobuf = null;
+        
+        const CONTENT_TOPIC = '/meme-board/1/images/proto';
+        
+        // Define protobuf schema
+        const protoSchema = {
+            "nested": {
+                "MemeMessage": {
+                    "fields": {
+                        "magnetUri": {
+                            "type": "string",
+                            "id": 1
+                        },
+                        "filename": {
+                            "type": "string", 
+                            "id": 2
+                        },
+                        "filesize": {
+                            "type": "uint64",
+                            "id": 3
+                        },
+                        "timestamp": {
+                            "type": "uint64",
+                            "id": 4
+                        },
+                        "postId": {
+                            "type": "uint32",
+                            "id": 5
+                        }
+                    }
+                }
+            }
+        };
 
         const fileInput = document.getElementById('fileInput');
         const imageWall = document.getElementById('imageWall');
@@ -267,6 +301,9 @@
                 timestamp: now,
                 file: file
             });
+            
+            // Add timestamp to post element for ordering
+            post.dataset.timestamp = now.getTime();
 
             if (file) {
                 createTorrent(file, postCounter);
@@ -336,6 +373,9 @@
                 magnetEl.style.display = 'block';
                 magnetEl.title = 'Click to copy magnet URI';
                 
+                // Send magnet link via Waku
+                sendMagnetViaWaku(torrent.magnetURI, file.name, file.size, postId);
+                
                 torrent.on('wire', function () {
                     statusEl.textContent = `Seeding (${torrent.numPeers} peers)`;
                 });
@@ -344,6 +384,30 @@
                     statusEl.textContent = `Seeding (${torrent.numPeers} peers) - ${formatBytes(torrent.uploaded)} uploaded`;
                 });
             });
+        }
+
+        async function sendMagnetViaWaku(magnetUri, filename, filesize, postId, client = wakuClient) {
+            try {
+                if (!client) {
+                    console.log('Waku client not initialized');
+                    return;
+                }
+                
+                const timestamp = Date.now();
+                const encodedMessage = encodeMessage(magnetUri, filename, filesize, timestamp, postId);
+                
+                console.log('Sending magnet via Waku:', { magnetUri, filename, filesize, timestamp, postId });
+                
+                await client.lightPush.send({
+                    payload: encodedMessage,
+                    contentTopic: CONTENT_TOPIC
+                });
+                
+                console.log('Successfully sent magnet via Waku');
+                
+            } catch (error) {
+                console.error('Failed to send magnet via Waku:', error);
+            }
         }
 
         function copyToClipboard(text) {
@@ -376,6 +440,46 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        // Initialize protobuf
+        function initProtobuf() {
+            const root = protobuf.Root.fromJSON(protoSchema);
+            memeProtobuf = root.lookupType("MemeMessage");
+        }
+
+        // Encode message to protobuf
+        function encodeMessage(magnetUri, filename, filesize, timestamp, postId) {
+            const message = {
+                magnetUri: magnetUri,
+                filename: filename,
+                filesize: filesize,
+                timestamp: timestamp,
+                postId: postId
+            };
+            
+            const errMsg = memeProtobuf.verify(message);
+            if (errMsg) {
+                throw Error(errMsg);
+            }
+            
+            const messageObj = memeProtobuf.create(message);
+            return memeProtobuf.encode(messageObj).finish();
+        }
+
+        // Decode protobuf message
+        function decodeMessage(buffer) {
+            try {
+                const message = memeProtobuf.decode(buffer);
+                return memeProtobuf.toObject(message, {
+                    longs: String,
+                    enums: String,
+                    bytes: String
+                });
+            } catch (error) {
+                console.error('Failed to decode message:', error);
+                return null;
+            }
+        }
+
         async function initWaku() {
             try {
                 console.log('Initializing Waku client...');
@@ -398,6 +502,9 @@
                 console.log('Waku client started successfully');
                 updateWakuStatus('Started - Connecting to node...');
                 
+                // Subscribe to incoming messages
+                await subscribeToMessages();
+                
                 // Dial the specific Waku node
                 const nodeAddress = '/dns4/waku.fryorcraken.xyz/tcp/8000/wss/p2p/16Uiu2HAmMRvhDHrtiHft1FTUYnn6cVA8AWVrTyLUayJJ3MWpUZDB';
                 try {
@@ -413,6 +520,45 @@
             }
         }
 
+        async function subscribeToMessages() {
+            try {
+                console.log('Subscribing to Waku messages...');
+                
+                const subscription = await wakuClient.filter.createSubscription();
+                await subscription.subscribe([CONTENT_TOPIC], (message) => {
+                    console.log('Received Waku message:', message);
+                    handleIncomingMessage(message);
+                });
+                
+                console.log('Successfully subscribed to messages');
+            } catch (error) {
+                console.error('Failed to subscribe to messages:', error);
+            }
+        }
+
+        function handleIncomingMessage(wakuMessage) {
+            try {
+                if (!wakuMessage.payload) {
+                    console.log('Message has no payload');
+                    return;
+                }
+                
+                const decodedMessage = decodeMessage(wakuMessage.payload);
+                if (!decodedMessage) {
+                    console.log('Failed to decode message');
+                    return;
+                }
+                
+                console.log('Decoded message:', decodedMessage);
+                
+                // Add received message to board
+                addReceivedImageToBoard(decodedMessage);
+                
+            } catch (error) {
+                console.error('Error handling incoming message:', error);
+            }
+        }
+
         function updateWakuStatus(status) {
             const statusElement = document.getElementById('wakuStatus');
             if (statusElement) {
@@ -420,7 +566,106 @@
             }
         }
 
+        function addReceivedImageToBoard(messageData) {
+            try {
+                // Check if we already have this post
+                const existingPost = document.querySelector(`[data-post-id="${messageData.postId}"]`);
+                if (existingPost) {
+                    console.log('Post already exists:', messageData.postId);
+                    return;
+                }
+                
+                const post = document.createElement('div');
+                post.className = 'post';
+                post.dataset.postId = messageData.postId;
+                post.dataset.timestamp = messageData.timestamp;
+                
+                const date = new Date(parseInt(messageData.timestamp));
+                const timeString = date.toLocaleString();
+                const filesizeKB = Math.round(parseInt(messageData.filesize) / 1024);
+                
+                post.innerHTML = `
+                    <div class="post-header">
+                        <span class="post-number">No.${messageData.postId}</span>
+                        <span class="post-time">${timeString}</span>
+                    </div>
+                    <div style="padding: 20px; text-align: center; background: #e8e8e8; color: #666;">
+                        <div style="font-size: 48px; margin-bottom: 10px;">🖼️</div>
+                        <div>Image available via torrent</div>
+                        <div style="font-size: 12px; margin-top: 5px;">Click magnet link to download</div>
+                    </div>
+                    <div class="post-filename">${messageData.filename} (${filesizeKB} KB)</div>
+                    <div class="torrent-status">Received via Waku</div>
+                    <div class="post-magnet" onclick="copyToClipboard(this.textContent)">${messageData.magnetUri}</div>
+                    <button class="delete-btn" onclick="deletePost(${messageData.postId})">&times;</button>
+                `;
+                
+                if (emptyState.style.display !== 'none') {
+                    emptyState.style.display = 'none';
+                }
+                
+                // Insert post in chronological order
+                insertPostInOrder(post);
+                
+                // Try to download the torrent to show the actual image
+                tryDownloadTorrent(messageData.magnetUri, messageData.postId);
+                
+                console.log('Added received image to board:', messageData.postId);
+                
+            } catch (error) {
+                console.error('Error adding received image to board:', error);
+            }
+        }
+
+        function insertPostInOrder(newPost) {
+            const newTimestamp = parseInt(newPost.dataset.timestamp);
+            const existingPosts = Array.from(imageWall.querySelectorAll('.post'));
+            
+            let insertIndex = existingPosts.length;
+            for (let i = 0; i < existingPosts.length; i++) {
+                const existingTimestamp = parseInt(existingPosts[i].dataset.timestamp || '0');
+                if (newTimestamp > existingTimestamp) {
+                    insertIndex = i;
+                    break;
+                }
+            }
+            
+            if (insertIndex === existingPosts.length) {
+                imageWall.appendChild(newPost);
+            } else {
+                imageWall.insertBefore(newPost, existingPosts[insertIndex]);
+            }
+        }
+
+        function tryDownloadTorrent(magnetUri, postId) {
+            try {
+                torrentClient.add(magnetUri, function (torrent) {
+                    console.log('Started downloading torrent for post:', postId);
+                    
+                    torrent.files.forEach(function (file) {
+                        if (file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                            file.getBlobURL(function (err, url) {
+                                if (!err && url) {
+                                    // Replace placeholder with actual image
+                                    const post = document.querySelector(`[data-post-id="${postId}"]`);
+                                    if (post) {
+                                        const placeholder = post.querySelector('div[style*="background: #e8e8e8"]');
+                                        if (placeholder) {
+                                            placeholder.outerHTML = `<img class="post-image" src="${url}" alt="${file.name}">`;
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    });
+                });
+            } catch (error) {
+                console.log('Could not download torrent:', error);
+            }
+        }
+
         window.addEventListener('load', function() {
+            initProtobuf();
             initWaku();
         });
     </script>
