@@ -208,6 +208,7 @@
         let torrentClient = new WebTorrent();
         let wakuClient = null;
         let memeProtobuf = null;
+        let wakuEncoder = null;
         
         const CONTENT_TOPIC = '/meme-board/1/images/proto';
         
@@ -386,10 +387,10 @@
             });
         }
 
-        async function sendMagnetViaWaku(magnetUri, filename, filesize, postId, client = wakuClient) {
+        async function sendMagnetViaWaku(magnetUri, filename, filesize, postId, client = wakuClient, encoder = wakuEncoder) {
             try {
-                if (!client) {
-                    console.log('Waku client not initialized');
+                if (!client || !encoder) {
+                    console.log('Waku client or encoder not initialized');
                     return;
                 }
                 
@@ -398,9 +399,8 @@
                 
                 console.log('Sending magnet via Waku:', { magnetUri, filename, filesize, timestamp, postId });
                 
-                await client.lightPush.send({
-                    payload: encodedMessage,
-                    contentTopic: CONTENT_TOPIC
+                await client.lightPush.send(encoder, {
+                    payload: encodedMessage
                 });
                 
                 console.log('Successfully sent magnet via Waku');
@@ -501,6 +501,10 @@
                 await wakuClient.start();
                 console.log('Waku client started successfully');
                 updateWakuStatus('Started - Connecting to node...');
+                
+                // Create encoder for sending messages
+                wakuEncoder = wakuClient.createEncoder({ contentTopic: CONTENT_TOPIC });
+                console.log('Created Waku encoder');
                 
                 // Subscribe to incoming messages
                 await subscribeToMessages();
