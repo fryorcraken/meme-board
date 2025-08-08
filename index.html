@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>/b/ - Meme Board</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #eef2ff;
+            color: #000;
+            line-height: 1.4;
+        }
+
+        .header {
+            background-color: #d6daf0;
+            border-bottom: 1px solid #b7c5d9;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #af0a0f;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .header .subtitle {
+            color: #789922;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .controls {
+            background-color: #d6daf0;
+            border-bottom: 1px solid #b7c5d9;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .upload-btn {
+            background-color: #d6daf0;
+            border: 1px solid #b7c5d9;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .upload-btn:hover {
+            background-color: #c5cae4;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .board {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .image-wall {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .post {
+            background-color: #f0e0d6;
+            border: 1px solid #d9bfb7;
+            border-radius: 3px;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+
+        .post:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .post-header {
+            background-color: #d6daf0;
+            padding: 8px 12px;
+            border-bottom: 1px solid #b7c5d9;
+            font-size: 12px;
+        }
+
+        .post-number {
+            color: #000080;
+            font-weight: bold;
+        }
+
+        .post-time {
+            color: #789922;
+            float: right;
+        }
+
+        .post-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            max-height: 300px;
+            object-fit: cover;
+        }
+
+        .post-filename {
+            padding: 8px 12px;
+            font-size: 11px;
+            color: #789922;
+            background-color: #f0e0d6;
+            word-break: break-all;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #789922;
+            font-size: 16px;
+            margin-top: 50px;
+        }
+
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: rgba(175, 10, 15, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            display: none;
+        }
+
+        .post {
+            position: relative;
+        }
+
+        .post:hover .delete-btn {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>/b/ - Meme Board</h1>
+        <div class="subtitle">Random - Images Only</div>
+    </div>
+
+    <div class="controls">
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+            Choose File
+        </button>
+        <input type="file" id="fileInput" accept="image/*" multiple>
+        <span id="fileCount"></span>
+    </div>
+
+    <div class="board">
+        <div class="image-wall" id="imageWall">
+            <div class="empty-state" id="emptyState">
+                No images posted yet. Be the first to post!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let postCounter = 1;
+        let images = [];
+
+        const fileInput = document.getElementById('fileInput');
+        const imageWall = document.getElementById('imageWall');
+        const emptyState = document.getElementById('emptyState');
+        const fileCount = document.getElementById('fileCount');
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        addImageToBoard(e.target.result, file.name, file.size);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            fileInput.value = '';
+        }
+
+        function addImageToBoard(imageSrc, filename, filesize) {
+            const post = document.createElement('div');
+            post.className = 'post';
+            post.dataset.postId = postCounter;
+
+            const now = new Date();
+            const timeString = now.toLocaleString();
+            const filesizeKB = Math.round(filesize / 1024);
+
+            post.innerHTML = `
+                <div class="post-header">
+                    <span class="post-number">No.${postCounter}</span>
+                    <span class="post-time">${timeString}</span>
+                </div>
+                <img class="post-image" src="${imageSrc}" alt="${filename}">
+                <div class="post-filename">${filename} (${filesizeKB} KB)</div>
+                <button class="delete-btn" onclick="deletePost(${postCounter})">&times;</button>
+            `;
+
+            if (emptyState.style.display !== 'none') {
+                emptyState.style.display = 'none';
+            }
+
+            imageWall.appendChild(post);
+            
+            images.push({
+                id: postCounter,
+                src: imageSrc,
+                filename: filename,
+                filesize: filesize,
+                timestamp: now
+            });
+
+            postCounter++;
+            updateFileCount();
+        }
+
+        function deletePost(postId) {
+            const post = document.querySelector(`[data-post-id="${postId}"]`);
+            if (post) {
+                post.remove();
+                images = images.filter(img => img.id !== postId);
+                updateFileCount();
+                
+                if (images.length === 0) {
+                    emptyState.style.display = 'block';
+                }
+            }
+        }
+
+        function updateFileCount() {
+            if (images.length > 0) {
+                fileCount.textContent = `${images.length} image${images.length !== 1 ? 's' : ''} posted`;
+            } else {
+                fileCount.textContent = '';
+            }
+        }
+
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            document.body.style.backgroundColor = '#e8ecf7';
+        });
+
+        document.addEventListener('dragleave', function(e) {
+            if (e.clientX === 0 && e.clientY === 0) {
+                document.body.style.backgroundColor = '#eef2ff';
+            }
+        });
+
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+            document.body.style.backgroundColor = '#eef2ff';
+            
+            const files = Array.from(e.dataTransfer.files);
+            files.forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        addImageToBoard(e.target.result, file.name, file.size);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
